@@ -1,0 +1,7 @@
+[package]
+name = "rust1"
+version = "0.1.0"
+authors = ["cora32 <cora32@tuta.io>"]
+
+[dependencies]
+rand = "0.3.18"
