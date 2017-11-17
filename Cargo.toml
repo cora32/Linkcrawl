@@ -3,5 +3,28 @@ name = "rust1"
 version = "0.1.0"
 authors = ["cora32 <cora32@tuta.io>"]
 
+[profile.dev]
+opt-level = 0
+debug = true
+rpath = false
+lto = false
+codegen-units = 4
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = 'unwind'
+
 [dependencies]
 rand = "0.3.18"
+hyper = "0.11.7"
+tokio-core = "0.1.10"
+futures = "0.1.17"
+hyper-tls = "0.1.2"
+regex = "0.2.2"
+lazy_static = "0.2.10"
+

@@ -1,97 +1,215 @@
-extern crate rand;
-use rand::distributions::{IndependentSample, Range};
-use std::net::TcpStream;
-use std::io::{Write, Read};
+extern crate hyper_tls;
+extern crate futures;
+extern crate hyper;
+extern crate tokio_core;
+extern crate regex;
+#[macro_use]
+extern crate lazy_static;
+
 use std::str;
 use std::env;
+use std::time::Duration;
+use futures::{Future, Stream};
+use futures::future::Either;
+use futures::future;
+use std::io::{self, Write};
+use hyper::Client;
+use hyper::Uri;
+use tokio_core::reactor::Core;
+use tokio_core::reactor::Timeout;
+use tokio_core::reactor::Handle;
+use hyper_tls::HttpsConnector;
+use hyper::Body;
+use hyper::client::HttpConnector;
+use regex::Regex;
+use std::borrow::Cow;
+use std::error::Error;
 
-static UA: &'static [&'static str] = &[
-    "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/40.0.2214.85 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.85 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:34.0) Gecko/20100101 Firefox/34.0",
-    "Mozilla/5.0 (Windows NT 6.3; WOW64; rv:34.0) Gecko/20100101 Firefox/34.0",
-    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:30.0) Gecko/20100101 Firefox/30.0",
-];
+struct Connector {
+    client: Client<HttpsConnector<HttpConnector>, Body>,
+    timeout: Timeout,
+    core: Core,
+    handle: Handle,
+}
+lazy_static! {
+            static ref RE: Regex = Regex::new(r#"href="(.*?)""#).unwrap();
+            }
+
+impl Connector {
+    //    fn get_body<'a>(&'a mut self, address: &String) -> Result<String, String> {
+    //        let uri: Uri = address.parse().unwrap();
+    //        println!("Address: {}", uri);
+    //
+    //        let get = self.client.get(uri).and_then(|res| {
+    //            println!("Mhhm..");
+    //
+    //            if res.status() == hyper::StatusCode::MovedPermanently {
+    //                let new_url = str::from_utf8(res.headers().get_raw("Location")
+    //                    .unwrap().one().unwrap()).unwrap();
+    //                println!("302!");
+    //                self.get_body(&new_url.to_owned());
+    //            }
+    //
+    //            println!("Mhhmm2...");
+    //            res.body().concat2()
+    //        });
+    //
+    //        let timeout = Timeout::new(Duration::from_secs(2), &self.handle).unwrap();
+    //        let work = get.select2(timeout).then(|res|
+    //            match res {
+    //                Ok(Either::A((got, _timeout))) => {
+    //                    println!("OK:");
+    //                    Ok(got)
+    //                },
+    //                Ok(Either::B((_timeout_error, _get))) => {
+    //                    Err(hyper::Error::Io(io::Error::new(
+    //                        io::ErrorKind::TimedOut,
+    //                        "Client timed out while connecting",
+    //                    )))
+    //                }
+    //                Err(Either::A((get_error, _timeout))) => Err(get_error),
+    //                Err(Either::B((timeout_error, _get))) => Err(From::from(timeout_error)),
+    //            });
+    //
+    //        let got = self.core.run(work).unwrap();
+    //        let result = str::from_utf8(&got).unwrap().to_owned();
+    //        println!("Returning... {}", result);
+    //        //        if new_url.len() != 0 {
+    //        //            return Err(new_url.to_owned())
+    //        //        } else {
+    //        //            return Ok(result)
+    //        //        }
+    //        return Ok(result)
+    //    }
+    fn get_body<'a>(&'a mut self, address: &String) {
+        let uri: Uri = address.parse().unwrap();
+        println!("Address: {}", uri);
+
+        //        let get = self.client.get(uri).and_then(|res| {
+        //            println!("Mhhm..");
+        //
+        //            if res.status() == hyper::StatusCode::MovedPermanently {
+        //                let new_url = str::from_utf8(res.headers().get_raw("Location")
+        //                    .unwrap().one().unwrap()).unwrap();
+        //                println!("302!");
+        //                self.get_body(&new_url.to_owned());
+        //            }
+        //
+        //            println!("Mhhmm2...");
+        //            res.body().concat2()
+        //        });
+
+        let request = self.client.get(uri).map(|res| res);
+        let timeout = Timeout::new(Duration::from_secs(2), &self.handle).unwrap();
+        let work = request.select2(timeout).then(|res|
+            match res {
+                Ok(Either::A((got, _timeout))) => {
+                    println!("OK:");
+                    Ok(got)
+                }
+                Ok(Either::B((_timeout_error, _get))) => {
+                    Err(hyper::Error::Io(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "Client timed out while connecting",
+                    )))
+                }
+                Err(Either::A((get_error, _timeout))) => Err(get_error),
+                Err(Either::B((timeout_error, _get))) => Err(From::from(timeout_error)),
+            });
+
+        let res = self.core.run(work).unwrap();
+        //        let result = str::from_utf8(&got).unwrap().to_owned();
+        println!("Returning... {}", res.status());
+
+        if res.status() == hyper::StatusCode::MovedPermanently {
+            let new_url = str::from_utf8(res.headers().get_raw("Location")
+                .unwrap().one().unwrap()).unwrap();
+            println!("302!");
+            //            self.get_body(&new_url.to_owned());
+//            Err(new_url.to_owned())
+        } else {
+            println!("200?!");
+            let fut = res.body().fold(Vec::new(), |mut v, chunk| {
+                v.extend(&chunk[..]);
+                println!("FUT1?! {:?}", str::from_utf8(&v).unwrap());
+                futures::future::ok::<_, hyper::Error>(v)
+            }).and_then(|chunks| {
+                let s = String::from_utf8(chunks).unwrap();
+                println!("FUT2?!");
+//                Ok::<String, hyper::Error>(s)
+                futures::future::ok::<_, hyper::Error>(s)
+            }).poll();
+            //            .and_then(|chunks| {
+            //                let s = String::from_utf8(chunks).unwrap();
+            //                println!("FUT2?!");
+            //                Ok::<String, hyper::Error>(s)
+            //            });
+            //            fut.wait().unwrap();
+//            Ok("".to_owned())
+            //            Ok(res.body().fold(Vec::new(), |mut v, chunk| {
+            //                v.extend(&chunk[..]);
+            //                ok::<_, Error>(v)
+            //            }).map(|chunks| {
+            //                String::from_utf8(chunks).unwrap()
+            //            }))
+        }
+    }
+
+    fn parse_body<'a>(&'a mut self, body: &String) {
+        let link_vector = RE.captures_iter(body).collect::<Vec<_>>();
+        let mut res = vec![""];
+        for link in link_vector.iter() {
+            let string = link.get(1).map_or("", |m| m.as_str());
+            println!("Temp: {:?}", string);
+            res.push(string);
+        }
+
+        res.sort();
+        res.dedup();
+
+        for link in res.iter() {
+            println!("Result: {}", link);
+        }
+    }
+
+    fn connect<'a>(&'a mut self, address: &String) {
+        let body = self.get_body(address);
+//        match body {
+//            Ok(r) => {
+//                self.parse_body(&r);
+//            }
+//            Err(e) => {
+//                self.connect(&e)
+//            }
+//        }
+    }
+
+    pub fn new() -> Connector {
+        let core = Core::new().unwrap();
+        let handle = core.handle();
+        Connector {
+            core,
+            client: Client::configure()
+                .connector(HttpsConnector::new(4, &handle).unwrap())
+                .build(&handle),
+            timeout: Timeout::new(Duration::from_secs(2), &handle).unwrap(),
+            handle,
+        }
+    }
+}
 
 fn main() {
-    let address = env::args().nth(1).expect("Missing argument");
-    println!("Address: {}\n", address);
-    get_links(address)
-    //    match get_links(address) {
-//        Ok(r) => println!("Ok: {}", r),
-//        Err(e) => println!("Err: {}", e)
-//    }
+    let raw_address = env::args().nth(1).expect("Missing argument");
+    let address = parse_address(raw_address);
+
+    let mut connector = Connector::new();
+    connector.connect(&address);
 }
 
-fn get_links(address: String) {
-    let mut sock = TcpStream::connect(format!("{}:{}", address, 80))
-        .expect("Couldn't connect to the server...");
-    sock.set_read_timeout(None).expect("set_read_timeout call failed");
-
-    let between = Range::new(0, UA.len());
-    let mut rng = rand::thread_rng();
-    let request: String = format!("GET / HTTP/1.1\r\n\
-        Host: {}\r\n\
-        Accept: text/css,*/*;q=0.1\r\n\
-        Accept-Language: ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3\r\n\
-        Accept-Encoding: gzip, deflate, br\r\n\
-        Referer: https://02ch.net/b/\r\n\
-        DNT: 1\r\n\
-        Connection: keep-alive\r\n\
-        User-Agent: {}\r\n\r\n", address, UA[between.ind_sample(&mut rng)]);
-    println!("Sending request: \n===========\n{}\n===========\n", request);
-    sock.write_all(request.as_bytes());
-
-//    let mut buf = String::new();
-//    sock.read_to_string(&mut buf)?;
-
-//    println!("Reading response...\n {}", buf);
-//    let mut buffer = [0; 128];
-//    let _ = sock.read(&mut buffer);
-//
-//    println!("{}", str::from_utf8(&buffer).unwrap().to_owned());
-
-//    let mut tempBuff = [8];
-//    while sock.read(&tempBuff) {
-//        buffer
-//    }
-
-//    Ok("".to_owned())
+fn parse_address(raw_address: String) -> String {
+    if raw_address.contains("http://") || raw_address.contains("https://") {
+        return raw_address;
+    } else {
+        return format!("https://{}", raw_address);
+    }
 }
-
-//fn hello<'a>(i : i32) -> std::io::Result<Cow<'a, String>> {
-//    let mut sock = TcpStream::connect("127.0.0.1:7834")?;
-//    sock.write_all("zaz!".as_bytes())?;
-//    println!("Data was sent...");
-//
-////    let buf = String::new();
-////    sock.read_to_string(&mut buf)?;
-//
-//    let mut buffer = [0; 8];
-//    let _ = sock.read(&mut buffer);
-//    Ok(Cow::Owned(str::from_utf8(&buffer).unwrap().to_owned())) //Return &str
-////    Ok(str::from_utf8(&buffer).unwrap().to_owned()) //Return String
-//
-////    let (main_tx, main_rx) = channel::<Vec<u8>>();
-////    let mut stream = TcpStream::connect("127.0.0.1:7834").unwrap();
-//////    let _ = stream.write(&[1]);
-//////    let a = stream.read(&mut[0; 128]);
-////
-////    let mut t = Vec::new();
-////    match main_rx.recv() {
-////        Ok(data) => {
-////            let mut buffer = [0; 1024];
-////            let _ = stream.write(&data.into_boxed_slice());
-////            let _ = stream.read(&mut buffer);
-////
-////            for i in buffer.iter() { t.push(*i); }
-////            let _ = thread_tx.send(t);
-////        }
-////
-////        Err(_) => return, // This means, that the sender has disconnected
-//        // and no further messages can ever be received
-////    }
-////
-////    println!("{:?}", t)
-//}
