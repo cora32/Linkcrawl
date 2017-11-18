@@ -36,72 +36,14 @@ lazy_static! {
             }
 
 impl Connector {
-    //    fn get_body<'a>(&'a mut self, address: &String) -> Result<String, String> {
-    //        let uri: Uri = address.parse().unwrap();
-    //        println!("Address: {}", uri);
-    //
-    //        let get = self.client.get(uri).and_then(|res| {
-    //            println!("Mhhm..");
-    //
-    //            if res.status() == hyper::StatusCode::MovedPermanently {
-    //                let new_url = str::from_utf8(res.headers().get_raw("Location")
-    //                    .unwrap().one().unwrap()).unwrap();
-    //                println!("302!");
-    //                self.get_body(&new_url.to_owned());
-    //            }
-    //
-    //            println!("Mhhmm2...");
-    //            res.body().concat2()
-    //        });
-    //
-    //        let timeout = Timeout::new(Duration::from_secs(2), &self.handle).unwrap();
-    //        let work = get.select2(timeout).then(|res|
-    //            match res {
-    //                Ok(Either::A((got, _timeout))) => {
-    //                    println!("OK:");
-    //                    Ok(got)
-    //                },
-    //                Ok(Either::B((_timeout_error, _get))) => {
-    //                    Err(hyper::Error::Io(io::Error::new(
-    //                        io::ErrorKind::TimedOut,
-    //                        "Client timed out while connecting",
-    //                    )))
-    //                }
-    //                Err(Either::A((get_error, _timeout))) => Err(get_error),
-    //                Err(Either::B((timeout_error, _get))) => Err(From::from(timeout_error)),
-    //            });
-    //
-    //        let got = self.core.run(work).unwrap();
-    //        let result = str::from_utf8(&got).unwrap().to_owned();
-    //        println!("Returning... {}", result);
-    //        //        if new_url.len() != 0 {
-    //        //            return Err(new_url.to_owned())
-    //        //        } else {
-    //        //            return Ok(result)
-    //        //        }
-    //        return Ok(result)
-    //    }
-    fn get_body<'a>(&'a mut self, address: &String) {
+    fn get_body<'a>(&'a mut self, address: &String) -> Result<Future, Error> {
         let uri: Uri = address.parse().unwrap();
         println!("Address: {}", uri);
 
-        //        let get = self.client.get(uri).and_then(|res| {
-        //            println!("Mhhm..");
-        //
-        //            if res.status() == hyper::StatusCode::MovedPermanently {
-        //                let new_url = str::from_utf8(res.headers().get_raw("Location")
-        //                    .unwrap().one().unwrap()).unwrap();
-        //                println!("302!");
-        //                self.get_body(&new_url.to_owned());
-        //            }
-        //
-        //            println!("Mhhmm2...");
-        //            res.body().concat2()
-        //        });
-
         let request = self.client.get(uri).map(|res| res);
         let timeout = Timeout::new(Duration::from_secs(2), &self.handle).unwrap();
-        let work = request.select2(timeout).then(|res|
+        let work = request.select2(timeout)
+            .then(|res| {
             match res {
                 Ok(Either::A((got, _timeout))) => {
                     println!("OK:");
@@ -115,44 +57,26 @@ impl Connector {
                 }
                 Err(Either::A((get_error, _timeout))) => Err(get_error),
                 Err(Either::B((timeout_error, _get))) => Err(From::from(timeout_error)),
-            });
+            }
+        }).and_then(|res| {
+            if res.status() == hyper::StatusCode::MovedPermanently {
+                let new_url = str::from_utf8(res.headers().get_raw("Location")
+                    .unwrap().one().unwrap()).unwrap();
+                println!("302!");
+            }
 
-        let res = self.core.run(work).unwrap();
-        //        let result = str::from_utf8(&got).unwrap().to_owned();
-        println!("Returning... {}", res.status());
+            res.body().for_each(|chunk| {
+                io::stdout()
+                    .write_all(&chunk)
+                    .map_err(From::from)
+            }).map(|x| {
+                println!("Done");
+                String::from("Hello, world!")
+            })
+        });
 
-        if res.status() == hyper::StatusCode::MovedPermanently {
-            let new_url = str::from_utf8(res.headers().get_raw("Location")
-                .unwrap().one().unwrap()).unwrap();
-            println!("302!");
-            //            self.get_body(&new_url.to_owned());
-//            Err(new_url.to_owned())
-        } else {
-            println!("200?!");
-            let fut = res.body().fold(Vec::new(), |mut v, chunk| {
-                v.extend(&chunk[..]);
-                println!("FUT1?! {:?}", str::from_utf8(&v).unwrap());
-                futures::future::ok::<_, hyper::Error>(v)
-            }).and_then(|chunks| {
-                let s = String::from_utf8(chunks).unwrap();
-                println!("FUT2?!");
-//                Ok::<String, hyper::Error>(s)
-                futures::future::ok::<_, hyper::Error>(s)
-            }).poll();
-            //            .and_then(|chunks| {
-            //                let s = String::from_utf8(chunks).unwrap();
-            //                println!("FUT2?!");
-            //                Ok::<String, hyper::Error>(s)
-            //            });
-            //            fut.wait().unwrap();
-//            Ok("".to_owned())
-            //            Ok(res.body().fold(Vec::new(), |mut v, chunk| {
-            //                v.extend(&chunk[..]);
-            //                ok::<_, Error>(v)
-            //            }).map(|chunks| {
-            //                String::from_utf8(chunks).unwrap()
-            //            }))
-        }
+        let res = self.core.run(work);
+        res
     }
 
     fn parse_body<'a>(&'a mut self, body: &String) {
@@ -174,14 +98,14 @@ impl Connector {
 
     fn connect<'a>(&'a mut self, address: &String) {
         let body = self.get_body(address);
-//        match body {
-//            Ok(r) => {
-//                self.parse_body(&r);
-//            }
-//            Err(e) => {
-//                self.connect(&e)
-//            }
-//        }
+        //        match body {
+        //            Ok(r) => {
+        //                self.parse_body(&r);
+        //            }
+        //            Err(e) => {
+        //                self.connect(&e)
+        //            }
+        //        }
     }
 
     pub fn new() -> Connector {
