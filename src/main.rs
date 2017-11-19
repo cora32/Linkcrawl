@@ -21,6 +21,7 @@ use hyper_tls::HttpsConnector;
 use hyper::Body;
 use hyper::client::HttpConnector;
 use regex::Regex;
+use std::error::Error;
 
 struct Connector {
     client: Client<HttpsConnector<HttpConnector>, Body>,
@@ -58,7 +59,7 @@ impl Connector {
         match self.core.run(work) {
             Ok(r) => Some(r),
             Err(e) => {
-                println!("Cannot connect to {}", address);
+                println!("Cannot connect to {}: {}", address, e.description());
                 None
             }
         }
@@ -86,10 +87,16 @@ impl Connector {
 
     fn get_redirected_response<'a>(&'a mut self,
                                    _response: hyper::Response<Body>) -> hyper::Response<Body> {
+        let mut loop_counter = 0;
         let mut response = _response;
         while response.status() == hyper::StatusCode::MovedPermanently
             || response.status() == hyper::StatusCode::TemporaryRedirect
             || response.status() == hyper::StatusCode::PermanentRedirect {
+            if loop_counter == 5 {
+                println!("Redirection loop");
+                break;
+            }
+
             let new_location = str::from_utf8(response.headers()
                 .get_raw("Location")
                 .unwrap()
@@ -102,35 +109,18 @@ impl Connector {
                 Some(_response) => { response = _response },
                 _ => {}
             }
+            loop_counter += 1;
         }
 
         response
     }
 
     fn run<'a>(&'a mut self, address: &String) {
-        let mut result = self.get_res(address);
+        let result = self.get_res(address);
 
         match result {
-            Some(_response) => {
-                let mut response = self.get_redirected_response(_response);
-//                let mut response = _response;
-//                while response.status() == hyper::StatusCode::MovedPermanently
-//                    || response.status() == hyper::StatusCode::TemporaryRedirect
-//                    || response.status() == hyper::StatusCode::PermanentRedirect {
-//                    let new_location = str::from_utf8(response.headers()
-//                        .get_raw("Location")
-//                        .unwrap()
-//                        .one()
-//                        .unwrap())
-//                        .unwrap()
-//                        .to_owned();
-//                    result = self.get_res(&new_location);
-//
-//                    match result {
-//                        Some(_response) => {response = _response},
-//                        _ => {}
-//                    }
-//                }
+            Some(response_with_location) => {
+                let response = self.get_redirected_response(response_with_location);
 
                 let body_string = response.body().concat2().map(|chunk| {
                     let v = chunk.to_vec();
@@ -140,7 +130,6 @@ impl Connector {
 
                 match run {
                     Ok(r) => {
-//                        println!("Ok {:?}", &r);
                         self.parse_body(&r);
                     }
                     Err(e) => {
@@ -166,11 +155,16 @@ impl Connector {
 }
 
 fn main() {
-    let raw_address = env::args().nth(1).expect("Missing argument");
-    let address = parse_address(raw_address);
+    let raw_address = env::args().nth(1);
+    match raw_address {
+        Some(arg) => {
+            let address = parse_address(arg);
 
-    let mut connector = Connector::new();
-    connector.run(&address);
+            let mut connector = Connector::new();
+            connector.run(&address);
+        },
+        None => println!("Missing argument")
+    }
 }
 
 fn parse_address(raw_address: String) -> String {
