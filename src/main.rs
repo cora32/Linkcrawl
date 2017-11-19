@@ -8,11 +8,10 @@ extern crate lazy_static;
 
 use std::str;
 use std::env;
+use std::io;
 use std::time::Duration;
 use futures::{Future, Stream};
 use futures::future::Either;
-use futures::future;
-use std::io::{self, Write};
 use hyper::Client;
 use hyper::Uri;
 use tokio_core::reactor::Core;
@@ -22,13 +21,9 @@ use hyper_tls::HttpsConnector;
 use hyper::Body;
 use hyper::client::HttpConnector;
 use regex::Regex;
-use std::borrow::Cow;
-use std::error::Error;
-use hyper::header::{Headers, Location};
 
 struct Connector {
     client: Client<HttpsConnector<HttpConnector>, Body>,
-    timeout: Timeout,
     core: Core,
     handle: Handle,
 }
@@ -37,7 +32,7 @@ lazy_static! {
             }
 
 impl Connector {
-    fn get_res(&mut self, address: &String) -> hyper::Response<Body> {
+    fn get_res(&mut self, address: &String) -> Option<hyper::Response<Body>> {
         let uri: Uri = address.parse().unwrap();
         println!("Connecting to: {}", uri);
 
@@ -60,7 +55,13 @@ impl Connector {
                 }
             }).map(|res| res);
 
-        self.core.run(work).unwrap()
+        match self.core.run(work) {
+            Ok(r) => Some(r),
+            Err(e) => {
+                println!("Cannot connect to {}", address);
+                None
+            }
+        }
     }
 
     fn parse_body<'a>(&'a mut self, body: &String) {
@@ -68,7 +69,7 @@ impl Connector {
         let mut res = vec![""];
         for link in link_vector.iter() {
             let string = link.get(1).map_or("", |m| m.as_str());
-            println!("Temp: {:?}", string);
+//            println!("Temp: {:?}", string);
             res.push(string);
         }
 
@@ -77,39 +78,77 @@ impl Connector {
 
         for link in res.iter() {
             println!("Result: {}", link);
+            if link.len() == 0 {
+                println!("Result: Empty!");
+            }
         }
     }
 
-    fn run<'a>(&'a mut self, address: &String) {
-        let mut response = self.get_res(address);
-
+    fn get_redirected_response<'a>(&'a mut self,
+                                   _response: hyper::Response<Body>) -> hyper::Response<Body> {
+        let mut response = _response;
         while response.status() == hyper::StatusCode::MovedPermanently
             || response.status() == hyper::StatusCode::TemporaryRedirect
             || response.status() == hyper::StatusCode::PermanentRedirect {
             let new_location = str::from_utf8(response.headers()
-                    .get_raw("Location")
-                    .unwrap()
-                    .one()
-                    .unwrap())
+                .get_raw("Location")
+                .unwrap()
+                .one()
+                .unwrap())
                 .unwrap()
                 .to_owned();
-            response = self.get_res(&new_location);
+
+            match self.get_res(&new_location) {
+                Some(_response) => { response = _response },
+                _ => {}
+            }
         }
 
-        let body_string = response.body().concat2().map(|chunk| {
-            let v = chunk.to_vec();
-            String::from_utf8_lossy(&v).to_string()
-        });
-        let run = self.core.run(body_string);
+        response
+    }
 
-        match run {
-            Ok(r) => {
-                println!("Ok {:?}", &r);
-                self.parse_body(&r);
-            }
-            Err(e) => {
-                println!("Error {:?}", &e);
-            }
+    fn run<'a>(&'a mut self, address: &String) {
+        let mut result = self.get_res(address);
+
+        match result {
+            Some(_response) => {
+                let mut response = self.get_redirected_response(_response);
+//                let mut response = _response;
+//                while response.status() == hyper::StatusCode::MovedPermanently
+//                    || response.status() == hyper::StatusCode::TemporaryRedirect
+//                    || response.status() == hyper::StatusCode::PermanentRedirect {
+//                    let new_location = str::from_utf8(response.headers()
+//                        .get_raw("Location")
+//                        .unwrap()
+//                        .one()
+//                        .unwrap())
+//                        .unwrap()
+//                        .to_owned();
+//                    result = self.get_res(&new_location);
+//
+//                    match result {
+//                        Some(_response) => {response = _response},
+//                        _ => {}
+//                    }
+//                }
+
+                let body_string = response.body().concat2().map(|chunk| {
+                    let v = chunk.to_vec();
+                    String::from_utf8_lossy(&v).to_string()
+                });
+                let run = self.core.run(body_string);
+
+                match run {
+                    Ok(r) => {
+//                        println!("Ok {:?}", &r);
+                        self.parse_body(&r);
+                    }
+                    Err(e) => {
+                        println!("Error {:?}", &e);
+                    }
+                }
+            },
+            _ => {}
         }
     }
 
@@ -121,7 +160,6 @@ impl Connector {
             client: Client::configure()
                 .connector(HttpsConnector::new(4, &handle).unwrap())
                 .build(&handle),
-            timeout: Timeout::new(Duration::from_secs(2), &handle).unwrap(),
             handle,
         }
     }
