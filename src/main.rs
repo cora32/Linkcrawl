@@ -24,6 +24,7 @@ use hyper::client::HttpConnector;
 use regex::Regex;
 use std::borrow::Cow;
 use std::error::Error;
+use hyper::header::{Headers, Location};
 
 struct Connector {
     client: Client<HttpsConnector<HttpConnector>, Body>,
@@ -36,47 +37,30 @@ lazy_static! {
             }
 
 impl Connector {
-    fn get_body<'a>(&'a mut self, address: &String) -> Result<Future, Error> {
+    fn get_res(&mut self, address: &String) -> hyper::Response<Body> {
         let uri: Uri = address.parse().unwrap();
-        println!("Address: {}", uri);
+        println!("Connecting to: {}", uri);
 
         let request = self.client.get(uri).map(|res| res);
         let timeout = Timeout::new(Duration::from_secs(2), &self.handle).unwrap();
         let work = request.select2(timeout)
             .then(|res| {
-            match res {
-                Ok(Either::A((got, _timeout))) => {
-                    println!("OK:");
-                    Ok(got)
+                match res {
+                    Ok(Either::A((got, _timeout))) => {
+                        Ok(got)
+                    }
+                    Ok(Either::B((_timeout_error, _get))) => {
+                        Err(hyper::Error::Io(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "Client timed out while connecting",
+                        )))
+                    }
+                    Err(Either::A((get_error, _timeout))) => Err(get_error),
+                    Err(Either::B((timeout_error, _get))) => Err(From::from(timeout_error)),
                 }
-                Ok(Either::B((_timeout_error, _get))) => {
-                    Err(hyper::Error::Io(io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        "Client timed out while connecting",
-                    )))
-                }
-                Err(Either::A((get_error, _timeout))) => Err(get_error),
-                Err(Either::B((timeout_error, _get))) => Err(From::from(timeout_error)),
-            }
-        }).and_then(|res| {
-            if res.status() == hyper::StatusCode::MovedPermanently {
-                let new_url = str::from_utf8(res.headers().get_raw("Location")
-                    .unwrap().one().unwrap()).unwrap();
-                println!("302!");
-            }
+            }).map(|res| res);
 
-            res.body().for_each(|chunk| {
-                io::stdout()
-                    .write_all(&chunk)
-                    .map_err(From::from)
-            }).map(|x| {
-                println!("Done");
-                String::from("Hello, world!")
-            })
-        });
-
-        let res = self.core.run(work);
-        res
+        self.core.run(work).unwrap()
     }
 
     fn parse_body<'a>(&'a mut self, body: &String) {
@@ -96,16 +80,37 @@ impl Connector {
         }
     }
 
-    fn connect<'a>(&'a mut self, address: &String) {
-        let body = self.get_body(address);
-        //        match body {
-        //            Ok(r) => {
-        //                self.parse_body(&r);
-        //            }
-        //            Err(e) => {
-        //                self.connect(&e)
-        //            }
-        //        }
+    fn run<'a>(&'a mut self, address: &String) {
+        let mut response = self.get_res(address);
+
+        while response.status() == hyper::StatusCode::MovedPermanently
+            || response.status() == hyper::StatusCode::TemporaryRedirect
+            || response.status() == hyper::StatusCode::PermanentRedirect {
+            let new_location = str::from_utf8(response.headers()
+                    .get_raw("Location")
+                    .unwrap()
+                    .one()
+                    .unwrap())
+                .unwrap()
+                .to_owned();
+            response = self.get_res(&new_location);
+        }
+
+        let body_string = response.body().concat2().map(|chunk| {
+            let v = chunk.to_vec();
+            String::from_utf8_lossy(&v).to_string()
+        });
+        let run = self.core.run(body_string);
+
+        match run {
+            Ok(r) => {
+                println!("Ok {:?}", &r);
+                self.parse_body(&r);
+            }
+            Err(e) => {
+                println!("Error {:?}", &e);
+            }
+        }
     }
 
     pub fn new() -> Connector {
@@ -127,7 +132,7 @@ fn main() {
     let address = parse_address(raw_address);
 
     let mut connector = Connector::new();
-    connector.connect(&address);
+    connector.run(&address);
 }
 
 fn parse_address(raw_address: String) -> String {
