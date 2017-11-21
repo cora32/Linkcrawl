@@ -5,8 +5,9 @@ extern crate tokio_core;
 extern crate regex;
 #[macro_use]
 extern crate lazy_static;
+extern crate ansi_term;
 
-use std::env;
+use std::{env, thread};
 
 pub mod connector;
 use connector::connector::Connector;
@@ -17,8 +18,11 @@ fn main() {
         Some(arg) => {
             let address = parse_address(arg);
 
-            let mut connector = Connector::new();
-            connector.run(&address);
+            let thread = thread::spawn(move || {
+                let mut connector = Connector::new();
+                connector.run(&address);
+            });
+            thread.join();
         },
         None => println!("Missing argument")
     }
