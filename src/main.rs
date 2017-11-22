@@ -10,9 +10,21 @@ extern crate ansi_term;
 use std::{env, thread};
 
 pub mod connector;
+pub mod statistics_server;
+
 use connector::connector::Connector;
+use statistics_server::statistics_server::update as update;
+use statistics_server::statistics_server::listen as start_stat_server;
+
 
 fn main() {
+    pub struct StatStruct {
+        string: &'static str
+    }
+
+    pub static DATA_STRUCT: StatStruct = StatStruct {
+        string: "test",
+    };
     let raw_address = env::args().nth(1);
     match raw_address {
         Some(arg) => {
@@ -20,10 +32,16 @@ fn main() {
 
             let thread = thread::spawn(move || {
                 let mut connector = Connector::new();
-                connector.run(&address);
+                connector.run(&address, &update);
             });
+
+            let server_thread = thread::spawn(move || {
+                start_stat_server();
+            });
+
             thread.join();
-        },
+            server_thread.join();
+        }
         None => println!("Missing argument")
     }
 }
