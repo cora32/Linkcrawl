@@ -10,7 +10,6 @@ pub mod connector {
     use futures::{Future, Stream};
     use futures::future::Either;
     use ansi_term::Colour::*;
-    use statistics_server::statistics_server::MUTABLE_DATA as MUTABLE_DATA;
 
     pub struct Connector {
         client: Client<HttpsConnector<HttpConnector>, Body>,
@@ -124,7 +123,6 @@ pub mod connector {
         }
 
         pub fn run<'a>(&'a mut self, address: &String, f: &Fn(&String)) {
-            let mut stub: &str = "";
             let parent_uri: Uri = address.parse().unwrap();
             let scheme = parent_uri.scheme().unwrap();
             let authority = parent_uri.authority().unwrap();
@@ -133,6 +131,7 @@ pub mod connector {
             let sleep_time = time::Duration::from_millis(10000);
             let mut link_vector = vec![address.clone()];
             let mut index = 0;
+
             while !link_vector.is_empty() && index < link_vector.len() {
                 let mut result = None;
                 {
@@ -173,12 +172,9 @@ pub mod connector {
                                             counter += 1;
                                         }
                                     });
-                                println!("Found {} links; added {}; links in vector {}; current index {}", new_link_vector.len(), counter, link_vector.len(), index);
-//                                f(&format!("Found {} links; added {}; links in vector {}; current index {}", new_link_vector.len(), counter, link_vector.len(), index));
-                                unsafe {
-//                                    stub = &format!("Found {} links; added {}; links in vector {}; current index {}", new_link_vector.len(), counter, link_vector.len(), index);
-//                                    MUTABLE_DATA = &stub;
-                                }
+                                let data = format!("Found {} links; added {}; links in vector {}; current index {}", new_link_vector.len(), counter, link_vector.len(), index);
+                                println!("{}", &data);
+                                f(&data);
                             }
                             Err(e) => {
                                 println!("Error {:?}", &e);

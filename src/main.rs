@@ -16,15 +16,7 @@ use connector::connector::Connector;
 use statistics_server::statistics_server::update as update;
 use statistics_server::statistics_server::listen as start_stat_server;
 
-
 fn main() {
-    pub struct StatStruct {
-        string: &'static str
-    }
-
-    pub static DATA_STRUCT: StatStruct = StatStruct {
-        string: "test",
-    };
     let raw_address = env::args().nth(1);
     match raw_address {
         Some(arg) => {
@@ -39,8 +31,8 @@ fn main() {
                 start_stat_server();
             });
 
-            thread.join();
-            server_thread.join();
+            let _ = thread.join();
+            let _ = server_thread.join();
         }
         None => println!("Missing argument")
     }
