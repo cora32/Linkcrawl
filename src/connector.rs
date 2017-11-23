@@ -10,6 +10,7 @@ pub mod connector {
     use futures::{Future, Stream};
     use futures::future::Either;
     use ansi_term::Colour::*;
+    use statistics_server::statistics_server::StatStruct as StatStruct;
 
     pub struct Connector {
         client: Client<HttpsConnector<HttpConnector>, Body>,
@@ -122,7 +123,7 @@ pub mod connector {
             response
         }
 
-        pub fn run<'a>(&'a mut self, address: &String, f: &Fn(&String)) {
+        pub fn run<'a>(&'a mut self, address: &String, f: &Fn(StatStruct)) {
             let parent_uri: Uri = address.parse().unwrap();
             let scheme = parent_uri.scheme().unwrap();
             let authority = parent_uri.authority().unwrap();
@@ -174,7 +175,7 @@ pub mod connector {
                                     });
                                 let data = format!("Found {} links; added {}; links in vector {}; current index {}", new_link_vector.len(), counter, link_vector.len(), index);
                                 println!("{}", &data);
-                                f(&data);
+                                f(StatStruct {count: 123, data_string: data, link_vector: link_vector.clone()});
                             }
                             Err(e) => {
                                 println!("Error {:?}", &e);

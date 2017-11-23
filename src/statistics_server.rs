@@ -18,11 +18,18 @@ pub mod statistics_server {
     }
 
     lazy_static! {
-        pub static ref MUTEX_VEC:RwLock<Option<String>>= RwLock::new(None);
+        pub static ref MUTEX_STAT_STRUCT:RwLock<Option<StatStruct>>= RwLock::new(None);
     }
 
-    pub fn update(new_data: &String) {
-        *MUTEX_VEC.write().unwrap() = Some(new_data.clone());
+    #[derive(Clone)]
+    pub struct StatStruct {
+        pub count:i32,
+        pub data_string:String,
+        pub link_vector:Vec<String>,
+    }
+
+    pub fn update(new_data: StatStruct) {
+        *MUTEX_STAT_STRUCT.write().unwrap() = Some(new_data);
     }
 
     pub fn listen() {
@@ -30,11 +37,24 @@ pub mod statistics_server {
         loop {
             let sock = listener.accept();
 
-            let temp_live_prolonger = &MUTEX_VEC.try_read().unwrap();
-            let option: Option<&String> = temp_live_prolonger.as_ref();
+            let temp_live_prolonger = &MUTEX_STAT_STRUCT.try_read().unwrap();
+            let option: Option<&StatStruct> = temp_live_prolonger.as_ref();
 
             match option {
-                Some(content) => {
+                Some(r) => {
+                    let mut content = "<pre>".to_owned();
+                    content.push_str(&r.data_string);
+
+                    let mut vec_string: String = "".to_owned();
+                    for item in &r.link_vector {
+                        vec_string.push_str(item);
+                        vec_string.push_str("\n");
+                    }
+
+                    content.push_str("\n");
+                    content.push_str(&vec_string);
+                    content.push_str("</pre>");
+
                     let response_header = build_response!(content);
                     send_data_to_client(&sock, &response_header.as_bytes());
                 },
