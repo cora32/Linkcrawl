@@ -53,36 +53,51 @@ pub mod connector {
             }
         }
 
-        fn parse_body<'a>(&'a mut self, parent_link: &String, body: &String) -> Vec<String> {
-            let link_vector = RE.captures_iter(body).collect::<Vec<_>>();
-            let mut res = vec![""];
-            for link in link_vector.iter() {
-                let string = link.get(1).map_or("", |m| m.as_str());
-                //            println!("Temp: {:?}", string);
+        /**
+        * Find all href links in body.
+        */
+        fn parse_body<'a>(&'a mut self, parent_link: &String, body: &String, file_extensions: &Vec<String>) -> Vec<String> {
+            let captures_vec = RE.captures_iter(body).collect::<Vec<_>>();
+            let mut res: Vec<String> = vec![];
+            for link in captures_vec {
+                let string: String = link.get(1).map(|m| m.as_str().to_owned()).unwrap();
                 if !res.contains(&string) {
                     res.push(string);
                 }
             }
 
-            //            res.sort();
-            //            res.dedup();
             let mut link_vector: Vec<String> = vec![];
-            res.iter()
-                .for_each(|x| {
-                    let path = String::from(*x);
-                    if !(path.contains("https://")
-                        || path.contains("http://")
-                        || path.contains("//")
-                        || path.contains("#")) {
-                        let new_link: String = format!("{}{}", parent_link, path);
-                        if !link_vector.contains(&new_link) {
-                            link_vector.push(new_link);
+            'outer: for path in &res {
+                //Ignoring external links, anchors and js
+                if path.contains("https://")
+                    || path.contains("http://")
+                    || path.contains("//")
+                    || path.contains("javascript:")
+                    || path.contains("#") {
+                        continue 'outer;
+                }
+
+                //Ignoring files if any
+                if file_extensions.len() != 0 {
+                    for x in file_extensions {
+                        if path.contains(x) {
+                            continue 'outer;
                         }
                     }
-                });
+                }
 
-            println!("{}", Fixed(034).bold().paint(format!("Links: {:?}", &link_vector)));
+                self.add_to_result(&mut link_vector, parent_link, &path);
+            }
+
+//            println!("{}", Fixed(034).bold().paint(format!("Links: {:?}", &link_vector)));
             link_vector
+        }
+
+        fn add_to_result<'a>(&'a mut self, link_vector: &mut Vec<String>, parent_link: &String, path: &str) {
+            let new_link: String = format!("{}{}", parent_link, path);
+            if !link_vector.contains(&new_link) {
+                link_vector.push(new_link);
+            }
         }
 
         fn get_redirected_response<'a>(&'a mut self,
@@ -124,13 +139,13 @@ pub mod connector {
             response
         }
 
-        pub fn run<'a>(&'a mut self, address: &String, f: &Fn(StatStruct)) {
+        pub fn run<'a>(&'a mut self, address: &String, f: &Fn(StatStruct), file_extensions: &Vec<String>) {
             let parent_uri: Uri = address.parse().unwrap();
             let scheme = parent_uri.scheme().unwrap();
             let authority = parent_uri.authority().unwrap();
             let parent_link = format!("{}://{}", scheme, authority);
 
-            let sleep_time = time::Duration::from_millis(10000);
+            let sleep_time = time::Duration::from_millis(1000);
             let mut link_vector = vec![address.clone()];
             let mut index = 0;
 
@@ -165,7 +180,7 @@ pub mod connector {
 
                         match run_result {
                             Ok(r) => {
-                                new_link_vector = self.parse_body(&parent_link,&r);
+                                new_link_vector = self.parse_body(&parent_link,&r, file_extensions);
                                 let mut counter = 0;
                                 new_link_vector.iter()
                                     .for_each(|new_link| {

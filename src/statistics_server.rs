@@ -6,14 +6,14 @@ pub mod statistics_server {
     macro_rules! build_response {
         ($x:expr) => {
             format!("HTTP/1.1 200 OK\r\n\
-                        Date: Mon, 27 Jul 2009 12:28:53 GMT\r\n\
-                        Server: Apache/2.2.14 (Win32)\r\n\
-                        Last-Modified: Wed, 22 Jul 2009 19:15:56 GMT\r\n\
-                        Content-Length: {}\r\n\
-                        Content-Type: text/html\r\n\
-                        Connection: close\r\n\
-                        \r\n\
-                        {}", $x.len(), $x)
+                     Date: Mon, 27 Jul 2009 12:28:53 GMT\r\n\
+                     Server: Apache/2.2.14 (Win32)\r\n\
+                     Last-Modified: Wed, 22 Jul 2009 19:15:56 GMT\r\n\
+                     Content-Length: {}\r\n\
+                     Content-Type: text/html\r\n\
+                     Connection: close\r\n\
+                     \r\n\
+                     {}", $x.len(), $x)
         };
     }
 
@@ -42,7 +42,9 @@ pub mod statistics_server {
 
             match option {
                 Some(r) => {
-                    let mut content = "<pre>".to_owned();
+                    let mut content = "<head>\
+                                      <meta charset=\"UTF-8\"> \
+                                      </head><pre>".to_owned();
                     content.push_str(&r.data_string);
 
                     let mut vec_string: String = "".to_owned();

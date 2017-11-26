@@ -8,6 +8,8 @@ extern crate lazy_static;
 extern crate ansi_term;
 
 use std::{env, thread};
+use std::fs::File;
+use std::io::Read;
 
 pub mod connector;
 pub mod statistics_server;
@@ -17,14 +19,30 @@ use statistics_server::statistics_server::update as update;
 use statistics_server::statistics_server::listen as start_stat_server;
 
 fn main() {
-    let raw_address = env::args().nth(1);
+    let args: Vec<String> = env::args().collect();
+    let mut raw_address:Option<String> = None;
+    let mut file_extensions: Vec<String> = vec![];
+    if env::args().len() > 1  {
+        for x in args {
+            if x.eq("-i") {
+                file_extensions = get_ignored_file_extensions();
+
+                for x in &file_extensions {
+                    println!("Ignoring: {}", x);
+                }
+            } else {
+                raw_address = Some(x.to_owned());
+            }
+        }
+    }
+
     match raw_address {
         Some(arg) => {
             let address = parse_address(arg);
 
             let thread = thread::spawn(move || {
                 let mut connector = Connector::new();
-                connector.run(&address, &update);
+                connector.run(&address, &update, &file_extensions);
             });
 
             let server_thread = thread::spawn(move || {
@@ -33,8 +51,8 @@ fn main() {
 
             let _ = thread.join();
             let _ = server_thread.join();
-        }
-        None => println!("Missing argument")
+        },
+        _ => println!("Missing argument")
     }
 }
 
@@ -44,4 +62,12 @@ fn parse_address(raw_address: String) -> String {
     } else {
         return format!("https://{}", raw_address);
     }
+}
+
+fn get_ignored_file_extensions() -> Vec<String> {
+    let filename = "ignored_extensions.txt";
+    let mut f = File::open(filename).expect("\"ignored_extensions.txt\" file not found.");
+    let mut contents = String::new();
+    f.read_to_string(&mut contents).expect("Something went wrong reading the file");
+    contents.split("\r\n").map(|s| s.to_owned()).collect()
 }
