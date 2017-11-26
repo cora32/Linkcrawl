@@ -72,7 +72,8 @@ pub mod connector {
                     let path = String::from(*x);
                     if !(path.contains("https://")
                         || path.contains("http://")
-                        || path.contains("//")) {
+                        || path.contains("//")
+                        || path.contains("#")) {
                         let new_link: String = format!("{}{}", parent_link, path);
                         if !link_vector.contains(&new_link) {
                             link_vector.push(new_link);
