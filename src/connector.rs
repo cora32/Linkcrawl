@@ -39,56 +39,6 @@ impl Connector {
     }
 
     /**
-    * Find all href links in body.
-    */
-    fn parse_body(&mut self, parent_link: &String, body: &String, file_extensions: &Vec<String>) -> Vec<String> {
-        let captures_vec = RE.captures_iter(body).collect::<Vec<_>>();
-        let mut res: Vec<String> = vec![];
-        for link in captures_vec {
-            let string: String = link.get(1).map(|m| m.as_str().to_owned()).unwrap();
-            if !res.contains(&string) {
-                res.push(string);
-            }
-        }
-
-        let mut link_vector: Vec<String> = vec![];
-        'outer: for path in &res {
-            //Ignore dupes
-            if MUTEX_DUPE_VECTOR.try_read().unwrap().contains(path) {
-                continue 'outer;
-            }
-
-            //Ignoring external links, anchors and js
-            if path.contains("https://")
-                || path.contains("http://")
-                || path.contains("//")
-                || path.contains("javascript:")
-                || path.contains("#") {
-                continue 'outer;
-            }
-
-            //Ignoring files if any
-            if file_extensions.len() != 0 {
-                for x in file_extensions {
-                    if path.contains(x) {
-                        continue 'outer;
-                    }
-                }
-            }
-
-            let new_link: String = format!("{}{}", parent_link, path);
-            if !link_vector.contains(&new_link) {
-//                println!("{}", Fixed(034).bold().paint(format!("Pushing: {}", &path)));
-                MUTEX_DUPE_VECTOR.write().unwrap().push(path.clone());
-                link_vector.push(new_link);
-            }
-        }
-
-//            println!("{}", Fixed(034).bold().paint(format!("Links: {:?}", &link_vector)));
-        link_vector
-    }
-
-    /**
     * Follow redirect location for Moved-responses.
     * If loop detected, None is returned; otherwise Response<Body> is returned.
     */
@@ -198,15 +148,15 @@ impl Connector {
                         match run_result {
                             Ok(r) => {
                                 let new_link_vector = self.parse_body(&parent_link, &r, file_extensions);
-                                let mut counter = 0;
-                                new_link_vector.iter()
-                                    .for_each(|new_link| {
-                                        if !MUTEX_DUPE_VECTOR.try_read().unwrap().contains(&new_link) {
-                                            MUTEX_DUPE_VECTOR.write().unwrap().push(new_link.clone());
-                                            counter += 1;
-                                        }
-                                    });
-                                let data = format!("Found {} links; added {}; links in vector {}", new_link_vector.len(), counter, MUTEX_DUPE_VECTOR.try_read().unwrap().len());
+//                                let mut counter = 0;
+//                                new_link_vector.iter()
+//                                    .for_each(|new_link| {
+//                                        if !MUTEX_DUPE_VECTOR.try_read().unwrap().contains(&new_link) {
+//                                            MUTEX_DUPE_VECTOR.write().unwrap().push(new_link.clone());
+//                                            counter += 1;
+//                                        }
+//                                    });
+                                let data = format!("Found {} links; links in vector {}", new_link_vector.len(), MUTEX_DUPE_VECTOR.try_read().unwrap().len());
                                 println!("{}", &data);
                                 f(StatStruct { count: 123, data_string: data, link_vector: MUTEX_DUPE_VECTOR.try_read().unwrap().clone() });
                                 return Some(new_link_vector);
@@ -225,6 +175,56 @@ impl Connector {
         }
 
         None
+    }
+
+    /**
+    * Find all href links in body.
+    */
+    fn parse_body(&mut self, parent_link: &String, body: &String, file_extensions: &Vec<String>) -> Vec<String> {
+        let captures_vec = RE.captures_iter(body).collect::<Vec<_>>();
+        let mut res: Vec<String> = vec![];
+        for link in captures_vec {
+            let string: String = link.get(1).map(|m| m.as_str().to_owned()).unwrap();
+            if !res.contains(&string) {
+                res.push(string);
+            }
+        }
+
+        let mut link_vector: Vec<String> = vec![];
+        'outer: for path in &res {
+            //Ignore dupes
+            if MUTEX_DUPE_VECTOR.try_read().unwrap().contains(path) {
+                continue 'outer;
+            }
+
+            //Ignoring external links, anchors and js
+            if path.contains("https://")
+                || path.contains("http://")
+                || path.contains("//")
+                || path.contains("javascript:")
+                || path.contains("#") {
+                continue 'outer;
+            }
+
+            //Ignoring files if any
+            if file_extensions.len() != 0 {
+                for x in file_extensions {
+                    if path.contains(x) {
+                        continue 'outer;
+                    }
+                }
+            }
+
+            let new_link: String = format!("{}{}", self.get_link(&parent_link), path);
+            if !link_vector.contains(&new_link) {
+//                println!("{}", Fixed(034).bold().paint(format!("Pushing: {}", &path)));
+                MUTEX_DUPE_VECTOR.write().unwrap().push(path.clone());
+                link_vector.push(new_link);
+            }
+        }
+
+//            println!("{}", Fixed(034).bold().paint(format!("Links: {:?}", &link_vector)));
+        link_vector
     }
 
     /**
@@ -264,7 +264,7 @@ impl Connector {
     */
     pub fn run(&mut self, address: &String, f: &Fn(StatStruct), file_extensions: &Vec<String>) {
         let parent_link = self.get_link(&address);
-        let mut root = LinkTreeNode::create(&*address);
+        let mut root = LinkTreeNode::create(&parent_link);
         self.fill_with_data(&mut root, &parent_link, f, file_extensions);
     }
 }
