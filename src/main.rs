@@ -11,12 +11,13 @@ use std::{env, thread};
 use std::fs::File;
 use std::io::Read;
 
-pub mod connector;
-pub mod statistics_server;
+mod connector;
+mod statistics_server;
+mod link_tree;
 
-use connector::connector::Connector;
-use statistics_server::statistics_server::update as update;
-use statistics_server::statistics_server::listen as start_stat_server;
+use connector::Connector;
+use statistics_server::update as update;
+use statistics_server::listen as start_stat_server;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
