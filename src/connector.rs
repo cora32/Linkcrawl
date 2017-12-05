@@ -138,7 +138,9 @@ impl Connector {
                 let response: Option<(String, hyper::Response<Body>)> = self.get_body(r);
                 match response {
                     Some(r) => {
-                        let parent_link = r.0;
+                        //Getting new link after redirection.
+                        let parent_link = self.get_link(&r.0);
+
                         let body_string = r.1.body().concat2().map(|chunk| {
                             let v = chunk.to_vec();
                             String::from_utf8_lossy(&v).to_string()
@@ -147,15 +149,8 @@ impl Connector {
 
                         match run_result {
                             Ok(r) => {
+                                println!("{}", Fixed(064).bold().paint(format!("parent_link: {}; link: {}", &parent_link, &link)));
                                 let new_link_vector = self.parse_body(&parent_link, &r, file_extensions);
-//                                let mut counter = 0;
-//                                new_link_vector.iter()
-//                                    .for_each(|new_link| {
-//                                        if !MUTEX_DUPE_VECTOR.try_read().unwrap().contains(&new_link) {
-//                                            MUTEX_DUPE_VECTOR.write().unwrap().push(new_link.clone());
-//                                            counter += 1;
-//                                        }
-//                                    });
                                 let data = format!("Found {} links; links in vector {}", new_link_vector.len(), MUTEX_DUPE_VECTOR.try_read().unwrap().len());
                                 println!("{}", &data);
                                 f(StatStruct { count: 123, data_string: data, link_vector: MUTEX_DUPE_VECTOR.try_read().unwrap().clone() });
@@ -192,6 +187,7 @@ impl Connector {
 
         let mut link_vector: Vec<String> = vec![];
         'outer: for path in &res {
+//            println!("{}", Fixed(038).bold().paint(format!("Path: {}", &path)));
             //Ignore dupes
             if MUTEX_DUPE_VECTOR.try_read().unwrap().contains(path) {
                 continue 'outer;
@@ -215,7 +211,7 @@ impl Connector {
                 }
             }
 
-            let new_link: String = format!("{}{}", self.get_link(&parent_link), path);
+            let new_link: String = format!("{}{}",&parent_link, path);
             if !link_vector.contains(&new_link) {
 //                println!("{}", Fixed(034).bold().paint(format!("Pushing: {}", &path)));
                 MUTEX_DUPE_VECTOR.write().unwrap().push(path.clone());
@@ -249,22 +245,28 @@ impl Connector {
     * Recursively fills parent nodes with corresponding children.
     */
     fn fill_with_data(&mut self, node: &mut LinkTreeNode, parent_link: &String,
-                      f: &Fn(StatStruct), file_extensions: &Vec<String>) {
+                      f: &Fn(StatStruct), file_extensions: &Vec<String>, depth: &u32) {
+        if node.depth() == depth {
+            println!("Maximum depth of {} exceeded.", depth);
+            return;
+        }
+
         self.add_children(node, f, file_extensions);
 
 //        println!("{}", node);
 
         for mut x in node.node_list() {
-            self.fill_with_data(&mut x, parent_link, f, file_extensions);
+            self.fill_with_data(&mut x, parent_link, f, file_extensions, depth);
         }
     }
 
     /**
     * Starts the site parsing logic.
     */
-    pub fn run(&mut self, address: &String, f: &Fn(StatStruct), file_extensions: &Vec<String>) {
+    pub fn run(&mut self, address: &String, f: &Fn(StatStruct), file_extensions: &Vec<String>,
+    depth: &u32) {
         let parent_link = self.get_link(&address);
         let mut root = LinkTreeNode::create(&parent_link);
-        self.fill_with_data(&mut root, &parent_link, f, file_extensions);
+        self.fill_with_data(&mut root, &parent_link, f, file_extensions, depth);
     }
 }

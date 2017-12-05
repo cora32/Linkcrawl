@@ -23,14 +23,20 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let mut raw_address:Option<String> = None;
     let mut file_extensions: Vec<String> = vec![];
+    let mut depth: u32 = 5;
     if env::args().len() > 1  {
-        for x in args {
+        for mut i in 0..args.len() {
+            let x = &args[i];
             if x.eq("-i") {
                 file_extensions = get_ignored_file_extensions();
 
                 for x in &file_extensions {
                     println!("Ignoring: {}", x);
                 }
+            } else if x.eq("-d") {
+                i = i + 1;
+                let x = &args[i];
+                depth = x.parse().unwrap();
             } else {
                 raw_address = Some(x.to_owned());
             }
@@ -43,7 +49,7 @@ fn main() {
 
             let thread = thread::spawn(move || {
                 let mut connector = Connector::new();
-                connector.run(&address, &update, &file_extensions);
+                connector.run(&address, &update, &file_extensions, &depth);
             });
 
             let server_thread = thread::spawn(move || {

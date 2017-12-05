@@ -10,7 +10,8 @@ pub struct LinkTreeNode {
     id: u32,
     link: String,
     node_list: Vec<LinkTreeNode>,
-    parent_id: u32
+    parent_id: u32,
+    depth: u32
 }
 
 impl fmt::Display for LinkTreeNode {
@@ -35,6 +36,7 @@ impl LinkTreeNode {
             link: link.clone(),
             node_list: vec![],
             parent_id: 0,
+            depth: 0,
         };
         *MUTEX_ID_COUNTER.write().unwrap() = id + 1;
         result
@@ -42,6 +44,7 @@ impl LinkTreeNode {
 
     pub fn add_child(&mut self, mut node: LinkTreeNode) {
         node.set_parent_id(self.id);
+        node.set_depth(self.depth + 1);
         self.node_list.push(node);
     }
 
@@ -49,8 +52,16 @@ impl LinkTreeNode {
         self.parent_id = parent_id;
     }
 
+    pub fn set_depth(&mut self, depth: u32) {
+        self.depth = depth;
+    }
+
     pub fn link(&mut self) -> &String {
         &self.link
+    }
+
+    pub fn depth(&mut self) -> &u32 {
+        &self.depth
     }
 
     pub fn node_list(&mut self) -> &mut Vec<LinkTreeNode>{
