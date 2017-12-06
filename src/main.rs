@@ -25,8 +25,9 @@ fn main() {
     let mut file_extensions: Vec<String> = vec![];
     let mut depth: u32 = 5;
     if env::args().len() > 1  {
-        for mut i in 0..args.len() {
-            let x = &args[i];
+        let mut index = 0;
+        while index != env::args().len() {
+            let x = &args[index];
             if x.eq("-i") {
                 file_extensions = get_ignored_file_extensions();
 
@@ -34,12 +35,13 @@ fn main() {
                     println!("Ignoring: {}", x);
                 }
             } else if x.eq("-d") {
-                i = i + 1;
-                let x = &args[i];
+                index = index + 1;
+                let x = &args[index];
                 depth = x.parse().unwrap();
             } else {
                 raw_address = Some(x.to_owned());
             }
+            index = index + 1;
         }
     }
 
