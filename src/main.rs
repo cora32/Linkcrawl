@@ -6,6 +6,7 @@ extern crate regex;
 #[macro_use]
 extern crate lazy_static;
 extern crate ansi_term;
+extern crate crossbeam;
 
 use std::{env, thread};
 use std::fs::File;
@@ -16,8 +17,6 @@ mod statistics_server;
 mod link_tree;
 
 use connector::Connector;
-use statistics_server::update as update;
-use statistics_server::listen as start_stat_server;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -50,16 +49,10 @@ fn main() {
             let address = parse_address(arg);
 
             let thread = thread::spawn(move || {
-                let mut connector = Connector::new();
-                connector.run(&address, &update, &file_extensions, &depth);
-            });
-
-            let server_thread = thread::spawn(move || {
-                start_stat_server();
+                Connector::new().run(&address, &file_extensions, &depth);
             });
 
             let _ = thread.join();
-            let _ = server_thread.join();
         },
         _ => println!("Missing argument")
     }

@@ -9,9 +9,10 @@ use regex::Regex;
 use futures::{Future, Stream};
 use futures::future::Either;
 use ansi_term::Colour::*;
-use statistics_server::StatStruct as StatStruct;
 use link_tree::LinkTreeNode;
 use std::sync::RwLock;
+use crossbeam;
+use statistics_server::listen as start_stat_server;
 
 pub struct Connector {
     client: Client<HttpsConnector<HttpConnector>, Body>,
@@ -131,7 +132,7 @@ impl Connector {
     /**
     * Requests @link, follows redirects and finds all href links per html body.
     */
-    fn get_link_vector(&mut self, link: &String, f: &Fn(StatStruct), file_extensions: &Vec<String>) -> Option<Vec<String>> {
+    fn get_link_vector(&mut self, link: &String, file_extensions: &Vec<String>) -> Option<Vec<String>> {
         let uri = link.parse();
         match uri {
             Ok(r) => {
@@ -149,11 +150,8 @@ impl Connector {
 
                         match run_result {
                             Ok(r) => {
-                                println!("{}", Fixed(064).bold().paint(format!("parent_link: {}; link: {}", &parent_link, &link)));
+//                                println!("{}", Fixed(064).bold().paint(format!("parent_link: {}; link: {}", &parent_link, &link)));
                                 let new_link_vector = self.parse_body(&parent_link, &r, file_extensions);
-                                let data = format!("Found {} links; links in vector {}", new_link_vector.len(), MUTEX_DUPE_VECTOR.try_read().unwrap().len());
-                                println!("{}", &data);
-                                f(StatStruct { count: 123, data_string: data, link_vector: MUTEX_DUPE_VECTOR.try_read().unwrap().clone() });
                                 return Some(new_link_vector);
                             }
                             Err(e) => {
@@ -161,7 +159,7 @@ impl Connector {
                             }
                         }
                     }
-                    _ => {}
+                    _ => println!("{}", Fixed(124).bold().paint(format!("Bad request for link: {}", &link)))
                 }
             }
             Err(e) => {
@@ -226,8 +224,8 @@ impl Connector {
     /**
     * Adds all new links to parent node as its children.
     */
-    fn add_children(&mut self, node: &mut LinkTreeNode, f: &Fn(StatStruct), file_extensions: &Vec<String>) {
-        let link_vector = self.get_link_vector(&node.link(), f, file_extensions);
+    fn add_children(&mut self, node: &mut LinkTreeNode, file_extensions: &Vec<String>) {
+        let link_vector = self.get_link_vector(&node.link(), file_extensions);
 
         match link_vector {
             Some(r) => {
@@ -245,28 +243,36 @@ impl Connector {
     * Recursively fills parent nodes with corresponding children.
     */
     fn fill_with_data(&mut self, node: &mut LinkTreeNode, parent_link: &String,
-                      f: &Fn(StatStruct), file_extensions: &Vec<String>, depth: &u32) {
+                      file_extensions: &Vec<String>, depth: &u32) {
         if node.depth() == depth {
             println!("Maximum depth of {} exceeded.", depth);
             return;
         }
 
-        self.add_children(node, f, file_extensions);
-
-//        println!("{}", node);
+        self.add_children(node, file_extensions);
 
         for mut x in node.node_list() {
-            self.fill_with_data(&mut x, parent_link, f, file_extensions, depth);
+            self.fill_with_data(&mut x, parent_link, file_extensions, depth);
         }
     }
 
     /**
     * Starts the site parsing logic.
     */
-    pub fn run(&mut self, address: &String, f: &Fn(StatStruct), file_extensions: &Vec<String>,
-    depth: &u32) {
+    pub fn run(&mut self, address: &String,
+               file_extensions: &Vec<String>,
+               depth: &u32
+    ) {
         let parent_link = self.get_link(&address);
         let mut root = LinkTreeNode::create(&parent_link);
-        self.fill_with_data(&mut root, &parent_link, f, file_extensions, depth);
+
+        //Start stat server.
+        unsafe {
+            crossbeam::spawn_unsafe(|| {
+                start_stat_server(&root);
+            });
+        }
+
+        self.fill_with_data(&mut root, &parent_link, file_extensions, depth);
     }
 }

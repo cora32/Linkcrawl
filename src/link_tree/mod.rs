@@ -56,11 +56,11 @@ impl LinkTreeNode {
         self.depth = depth;
     }
 
-    pub fn link(&mut self) -> &String {
+    pub fn link(&self) -> &String {
         &self.link
     }
 
-    pub fn depth(&mut self) -> &u32 {
+    pub fn depth(&self) -> &u32 {
         &self.depth
     }
 

@@ -1,6 +1,8 @@
 use std::net::{TcpListener, TcpStream, SocketAddr};
 use std::io::{Write, Error};
-use std::sync::RwLock;
+use link_tree::LinkTreeNode;
+use std::thread;
+use std::time::Duration;
 
 macro_rules! build_response {
         ($x:expr) => {
@@ -16,10 +18,6 @@ macro_rules! build_response {
         };
     }
 
-lazy_static! {
-        pub static ref MUTEX_STAT_STRUCT:RwLock<Option<StatStruct>>= RwLock::new(None);
-    }
-
 #[derive(Clone)]
 pub struct StatStruct {
     pub count: i32,
@@ -27,44 +25,21 @@ pub struct StatStruct {
     pub link_vector: Vec<String>,
 }
 
-pub fn update(new_data: StatStruct) {
-    *MUTEX_STAT_STRUCT.write().unwrap() = Some(new_data);
-}
-
-pub fn listen() {
+pub fn listen(tt: &LinkTreeNode) {
     let listener = TcpListener::bind("127.0.0.1:80").unwrap();
+    let wait_time = Duration::from_millis(10);
     loop {
         let sock = listener.accept();
-
-        let temp_live_prolonger = &MUTEX_STAT_STRUCT.try_read().unwrap();
-        let option: Option<&StatStruct> = temp_live_prolonger.as_ref();
-
-        match option {
-            Some(r) => {
-                let mut content = "<head>\
+        let mut content = "<head>\
                                       <meta charset=\"UTF-8\"> \
                                       </head><pre>".to_owned();
-                content.push_str(&r.data_string);
+        content.push_str(&format!("{}\n</pre>", &tt));
 
-                let mut vec_string: String = "".to_owned();
-                for item in &r.link_vector {
-                    vec_string.push_str(item);
-                    vec_string.push_str("\n");
-                }
-
-                content.push_str("\n");
-                content.push_str(&vec_string);
-                content.push_str("</pre>");
-
-                let response_header = build_response!(content);
-                send_data_to_client(&sock, &response_header.as_bytes());
-            }
-            _ => {
-                let content = "No data";
-                let response_header = build_response!(content);
-                send_data_to_client(&sock, &response_header.as_bytes());
-            }
-        }
+        let response_header = build_response!(content);
+        send_data_to_client(&sock, &response_header.as_bytes());
+        // Sometimes the connection is closed before browser expects it.
+        // To prevent the "Connection was closed" error, a little sleep is used.
+        thread::sleep(wait_time);
     }
 }
 
