@@ -1,8 +1,10 @@
-use std::net::{TcpListener, TcpStream, SocketAddr};
-use std::io::{Write, Error};
+use std::net::TcpListener;
+use std::io::{Write, Read};
 use link_tree::LinkTreeNode;
 use std::thread;
-use std::time::Duration;
+use native_tls::{Pkcs12, TlsAcceptor};
+use std::sync::Arc;
+use std::fs::File;
 
 macro_rules! build_response {
         ($x:expr) => {
@@ -25,30 +27,32 @@ pub struct StatStruct {
     pub link_vector: Vec<String>,
 }
 
-pub fn listen(tt: &LinkTreeNode) {
-    let listener = TcpListener::bind("127.0.0.1:80").unwrap();
-    let wait_time = Duration::from_millis(10);
+pub fn listen(root_node: &LinkTreeNode) {
+    let mut file = File::open("pac.pfx").expect("Stat server: PKCS \"pac.pfx\" file not found.");
+    let mut pkcs12 = vec![];
+    file.read_to_end(&mut pkcs12).unwrap();
+    let pkcs12 = Pkcs12::from_der(&pkcs12, "1231231").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:8443").unwrap();
+    let acceptor = TlsAcceptor::builder(pkcs12).unwrap().build().unwrap();
+    let acceptor = Arc::new(acceptor);
+
     loop {
-        let sock = listener.accept();
-        let mut content = "<head>\
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    let acceptor = acceptor.clone();
+                    let mut content = "<head>\
                                       <meta charset=\"UTF-8\"> \
                                       </head><pre>".to_owned();
-        content.push_str(&format!("{}\n</pre>", &tt));
-
-        let response_header = build_response!(content);
-        send_data_to_client(&sock, &response_header.as_bytes());
-        // Sometimes the connection is closed before browser expects it.
-        // To prevent the "Connection was closed" error, a little sleep is used.
-        thread::sleep(wait_time);
+                    content.push_str(&format!("{}\n</pre>", &root_node));
+                    thread::spawn(move || {
+                        let mut stream = acceptor.accept(stream).unwrap();
+                        let response_header = build_response!(content);
+                        let _ = stream.write_all(&response_header.as_bytes());
+                    });
+                }
+                Err(e) => { println!("Incomming connection error. {:?}", &e) }
+            }
+        }
     }
-}
-
-fn send_data_to_client(sock: &Result<(TcpStream, SocketAddr), Error>, data: &[u8]) {
-    let tuple = sock.as_ref().unwrap();
-    let mut stream = &tuple.0;
-    let address = tuple.1;
-
-    println!("Connection from {}", address);
-
-    let _ = stream.write_all(data);
 }

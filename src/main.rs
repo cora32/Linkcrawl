@@ -7,6 +7,7 @@ extern crate regex;
 extern crate lazy_static;
 extern crate ansi_term;
 extern crate crossbeam;
+extern crate native_tls;
 
 use std::{env, thread};
 use std::fs::File;

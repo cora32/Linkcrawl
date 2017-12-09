@@ -29,4 +29,4 @@ regex = "0.2.2"
 lazy_static = "0.2.10"
 ansi_term = "0.10.2"
 crossbeam = "0.3.0"
-
+native-tls = "0.1"

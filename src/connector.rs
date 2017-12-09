@@ -65,6 +65,7 @@ impl Connector {
                 .unwrap()
                 .to_owned();
 
+            println!("{}", &Fixed(214).bold().paint(format!("--> Redirection to {}", &new_location)));
 
             let uri = new_location.parse();
             match uri {
@@ -88,7 +89,7 @@ impl Connector {
     * Perform non-blocking http request.
     */
     fn get_body(&mut self, uri: Uri) -> Option<(String, hyper::Response<Body>)> {
-        println!("{}", Fixed(032).bold().paint(format!("Connecting to: {}", uri)));
+        println!("{}", &Fixed(032).bold().paint(format!("Connecting to: {}", &uri)));
 
         let link_string = uri.to_string();
         let request = self.client.get(uri).map(|res| res);
@@ -113,7 +114,7 @@ impl Connector {
         match self.core.run(work) {
             Ok(r) => Some(self.get_redirected_response(&link_string, r)),
             Err(e) => {
-                println!("Failed to connect: {}", e.description());
+                println!("Failed to connect: {}", &e.description());
                 None
             }
         }
@@ -163,7 +164,7 @@ impl Connector {
                 }
             }
             Err(e) => {
-                println!("Link \"{}\" is invalid: {}", link, e.description());
+                println!("Link \"{}\" is invalid: {}", &link, &e.description());
             }
         }
 
@@ -209,7 +210,7 @@ impl Connector {
                 }
             }
 
-            let new_link: String = format!("{}{}",&parent_link, path);
+            let new_link: String = format!("{}{}", &parent_link, path);
             if !link_vector.contains(&new_link) {
 //                println!("{}", Fixed(034).bold().paint(format!("Pushing: {}", &path)));
                 MUTEX_DUPE_VECTOR.write().unwrap().push(path.clone());
