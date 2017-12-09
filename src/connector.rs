@@ -270,7 +270,7 @@ impl Connector {
         //Start stat server.
         unsafe {
             crossbeam::spawn_unsafe(|| {
-                start_stat_server(&root);
+                start_stat_server(&mut root);
             });
         }
 

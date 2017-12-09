@@ -5,7 +5,7 @@ lazy_static! {
         pub static ref MUTEX_ID_COUNTER:RwLock<u32>= RwLock::new(0);
     }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LinkTreeNode {
     id: u32,
     link: String,
@@ -66,5 +66,9 @@ impl LinkTreeNode {
 
     pub fn node_list(&mut self) -> &mut Vec<LinkTreeNode>{
         &mut self.node_list
+    }
+
+    pub fn node_list_immutable(&self) -> &Vec<LinkTreeNode>{
+        &self.node_list
     }
 }

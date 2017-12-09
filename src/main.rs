@@ -3,11 +3,16 @@ extern crate futures;
 extern crate hyper;
 extern crate tokio_core;
 extern crate regex;
-#[macro_use]
-extern crate lazy_static;
 extern crate ansi_term;
 extern crate crossbeam;
 extern crate native_tls;
+extern crate serde;
+extern crate serde_json;
+
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate lazy_static;
 
 use std::{env, thread};
 use std::fs::File;
@@ -19,7 +24,33 @@ mod link_tree;
 
 use connector::Connector;
 
+#[derive(Serialize, Deserialize)]
+struct Address {
+    street: String,
+    city: String,
+    zoz: Vec<Address>
+}
 fn main() {
+    // Some data structure.
+    let a1 = Address {
+        street: "2 hah rer".to_owned(),
+        city: ":LSDKFJ:".to_owned(),
+        zoz: vec![],
+    };
+    let v1 = vec![a1];
+    let address = Address {
+        street: "10 Downing Street".to_owned(),
+        city: "London".to_owned(),
+        zoz: v1,
+    };
+
+    // Serialize it to a JSON string.
+    let j = serde_json::to_string(&address).unwrap();
+
+    // Print, write to a file, or send to an HTTP server.
+    println!("{}", j);
+
+
     let args: Vec<String> = env::args().collect();
     let mut raw_address:Option<String> = None;
     let mut file_extensions: Vec<String> = vec![];
