@@ -65,11 +65,10 @@ fn main() {
 }
 
 fn parse_address(raw_address: String) -> String {
-    if raw_address.contains("http://") || raw_address.contains("https://") {
-        return raw_address;
-    } else {
+    if !(raw_address.contains("http://") || raw_address.contains("https://")) {
         return format!("https://{}", raw_address);
     }
+    raw_address
 }
 
 fn get_ignored_file_extensions() -> Vec<String> {
