@@ -1,5 +1,5 @@
 use std::net::TcpListener;
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use link_tree::LinkTreeNode;
 use std::thread;
 use native_tls::{Pkcs12, TlsAcceptor};
@@ -43,12 +43,17 @@ pub fn listen(root_node: &LinkTreeNode) {
                 Ok(stream) => {
                     let acceptor = acceptor.clone();
                     let mut content = "<head>\
-                                      <meta charset=\"UTF-8\"> \
-                                      </head><pre>".to_owned();
-//                    content.push_str(&format!("{}\n</pre>", &root_node));
-                    content.push_str(&format!("{}\n</pre>", &serde_json::to_string(&root_node).unwrap()));
+                                       <meta charset=\"UTF-8\"> \
+                                       </head><pre>"
+                        .to_owned();
+                    //                    content.push_str(&format!("{}\n</pre>", &root_node));
+                    content.push_str(&format!(
+                        "{}\n</pre>",
+                        &serde_json::to_string(&root_node).unwrap()
+                    ));
                     content.push_str(&format!("{}\n", &get_canvas(&root_node)));
-                    content.push_str("<canvas id=\"myCanvas\" width=\"578\" height=\"200\"></canvas>
+                    content.push_str(
+                        "<canvas id=\"myCanvas\" width=\"578\" height=\"200\"></canvas>
                                             <script>
                                               var canvas = document.getElementById('myCanvas');
                                               canvas.width = document.body.clientWidth;
@@ -69,14 +74,15 @@ pub fn listen(root_node: &LinkTreeNode) {
                                               context.lineTo(288 + (288 - 150), 200);
 
                                               context.stroke();
-                                            </script>");
+                                            </script>",
+                    );
                     thread::spawn(move || {
                         let mut stream = acceptor.accept(stream).unwrap();
                         let response_header = build_response!(content);
                         let _ = stream.write_all(&response_header.as_bytes());
                     });
                 }
-                Err(e) => { println!("Incoming connection error. {:?}", &e) }
+                Err(e) => println!("Incoming connection error. {:?}", &e),
             }
         }
     }
@@ -84,9 +90,10 @@ pub fn listen(root_node: &LinkTreeNode) {
 
 fn get_canvas(root_node: &LinkTreeNode) -> String {
     let node_height = 50;
-//    let node_width = 100;
-//    let x = canvas_width/2 - node_width/2;
-    let header = format!("<canvas id=\"myCanvas\"></canvas>\n
+    //    let node_width = 100;
+    //    let x = canvas_width/2 - node_width/2;
+    let header = format!(
+        "<canvas id=\"myCanvas\"></canvas>\n
     <script>
         var canvas = document.getElementById('myCanvas');
         canvas.width = document.body.clientWidth;
@@ -95,7 +102,9 @@ fn get_canvas(root_node: &LinkTreeNode) -> String {
         var nodeWidth = 100;
         var nodeHeight = {};
 
-        context.beginPath();", node_height);
+        context.beginPath();",
+        node_height
+    );
     let footer = "context.stroke()
         </script>";
     let data = draw_tree(root_node, 0);
@@ -107,22 +116,25 @@ fn draw_tree(node: &LinkTreeNode, y: u32) -> String {
     let mut data: String = "".to_owned();
 
     //Create rect
-    data.push_str(&format!("context.rect({}, {}, nodeWidth, nodeHeight);
+    data.push_str(&format!(
+        "context.rect({}, {}, nodeWidth, nodeHeight);
         context.fillStyle = 'yellow';
         context.fill();
         context.lineWidth = 1;
-        context.strokeStyle = 'black';\n", 100, y));
+        context.strokeStyle = 'black';\n",
+        100, y
+    ));
 
-//    let children = node.node_list_immutable();
-//    let link = node.link();
-//    let size = children.len();
+    //    let children = node.node_list_immutable();
+    //    let link = node.link();
+    //    let size = children.len();
 
-//    for x in children {
-//        //Create lines
-//        data.push_str(&format!("
-//        context.moveTo(288, {});
-//        context.lineTo(150, 200);\n", y));
-//    }
+    //    for x in children {
+    //        //Create lines
+    //        data.push_str(&format!("
+    //        context.moveTo(288, {});
+    //        context.lineTo(150, 200);\n", y));
+    //    }
 
     data
 }

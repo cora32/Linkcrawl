@@ -2,8 +2,8 @@ use std::fmt;
 use std::sync::RwLock;
 
 lazy_static! {
-        pub static ref MUTEX_ID_COUNTER:RwLock<u32>= RwLock::new(0);
-    }
+    pub static ref MUTEX_ID_COUNTER:RwLock<u32>= RwLock::new(0);
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LinkTreeNode {
@@ -11,14 +11,20 @@ pub struct LinkTreeNode {
     link: String,
     node_list: Vec<LinkTreeNode>,
     parent_id: u32,
-    depth: u32
+    depth: u32,
 }
 
 impl fmt::Display for LinkTreeNode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let decimals = f.width().unwrap_or(0);
-        let mut string = format!("{: <width$}{}; id:{}; parent_id:{};\n", " ",
-                                 self.link, self.id, self.parent_id, width = decimals);
+        let mut string = format!(
+            "{: <width$}{}; id:{}; parent_id:{};\n",
+            " ",
+            self.link,
+            self.id,
+            self.parent_id,
+            width = decimals
+        );
 
         for x in &self.node_list {
             string.push_str(&format!("{:<1$}", x, decimals + 10))
@@ -64,11 +70,11 @@ impl LinkTreeNode {
         &self.depth
     }
 
-    pub fn node_list(&mut self) -> &mut Vec<LinkTreeNode>{
+    pub fn node_list(&mut self) -> &mut Vec<LinkTreeNode> {
         &mut self.node_list
     }
 
-    pub fn node_list_immutable(&self) -> &Vec<LinkTreeNode>{
+    pub fn node_list_immutable(&self) -> &Vec<LinkTreeNode> {
         &self.node_list
     }
 }
