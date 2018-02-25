@@ -6,6 +6,10 @@ use native_tls::{Pkcs12, TlsAcceptor};
 use std::sync::Arc;
 use std::fs::File;
 use serde_json;
+use std::collections::HashMap;
+use imageproc::drawing::draw_text_mut;
+use imageproc::drawing::draw_line_segment_mut;
+use rusttype::{FontCollection, Scale};
 
 macro_rules! build_response {
         ($x:expr) => {
@@ -28,7 +32,12 @@ pub struct StatStruct {
     pub link_vector: Vec<String>,
 }
 
-pub fn listen(root_node: &LinkTreeNode) {
+pub fn listen(
+    root_node: &LinkTreeNode,
+    width: &u32,
+    height: &u32,
+    depth_map: &mut HashMap<u32, u32>,
+) {
     let mut file = File::open("pac.pfx").expect("Stat server: PKCS \"pac.pfx\" file not found.");
     let mut pkcs12 = vec![];
     file.read_to_end(&mut pkcs12).unwrap();
@@ -81,11 +90,133 @@ pub fn listen(root_node: &LinkTreeNode) {
                         let response_header = build_response!(content);
                         let _ = stream.write_all(&response_header.as_bytes());
                     });
+
+                    draw_tree_png(root_node, width, height, depth_map);
+                    println!("height! {} width! {}", height, width)
                 }
                 Err(e) => println!("Incoming connection error. {:?}", &e),
             }
         }
     }
+}
+
+use std::collections::VecDeque;
+fn draw_tree_png(
+    root_node: &LinkTreeNode,
+    width: &u32,
+    height: &u32,
+    depth_map: &HashMap<u32, u32>,
+) {
+    use image::{Rgb, RgbImage};
+    use imageproc::drawing::draw_filled_circle_mut;
+
+    let node_height = 40;
+    let node_width = 40;
+    let mut radius = node_height / 2;
+    let img_width = width * node_width;
+    let img_height = height * node_height * 4;
+    let half_height = img_height / 2;
+    let half_width = img_width / 2;
+    let mut img = RgbImage::new(img_width, img_height);
+
+    let mut stack = VecDeque::new();
+    stack.push_back(root_node);
+
+    let text_height = 14.0;
+    let text_half_height = text_height / 2.0;
+    let scale = Scale {
+        x: text_height * 1.0,
+        y: text_height,
+    };
+    let font = Vec::from(include_bytes!("DejaVuSans.ttf") as &[u8]);
+    let font = FontCollection::from_bytes(font).into_font().unwrap();
+    let mut previous_depth_value = 0;
+    let mut x_step = img_width / 2;
+    let mut center_x = x_step;
+    let mut center_y = radius;
+    let mut center_x_to = center_x;
+    let mut center_y_to = center_y;
+    while let Some(node) = stack.pop_front() {
+        if *node.depth() != previous_depth_value {
+            previous_depth_value = *node.depth();
+            match depth_map.get(&previous_depth_value) {
+                Some(r) => {
+                    center_x_to = center_x - x_step;
+                    x_step = img_width / (r + 1);
+                    center_x = x_step;
+                    center_y_to = center_y;
+                    center_y += 4 * radius;
+                    // radius = x_step / 2;
+                    println!(
+                        "center_x {} center_y {}; {} items on level {}; id {}",
+                        center_x,
+                        center_y,
+                        r,
+                        &previous_depth_value,
+                        *node.get_id()
+                    );
+                }
+                None => {
+                    println!(" -- FAIL WTF {}", previous_depth_value);
+                }
+            }
+        } else {
+            match depth_map.get(&previous_depth_value) {
+                Some(r) => {
+                    println!(
+                        "(inner) center_x {} center_y {}; {} items on level {}; id {}",
+                        center_x,
+                        center_y,
+                        r,
+                        &previous_depth_value,
+                        *node.get_id()
+                    );
+                }
+                None => {
+                    println!(
+                        "(inner) center_x {} center_y {}; {} items on level {}; id {}",
+                        center_x,
+                        center_y,
+                        1,
+                        &previous_depth_value,
+                        *node.get_id()
+                    );
+                }
+            }
+        }
+
+        draw_line_segment_mut(
+            &mut img,
+            (center_x as f32, center_y as f32),
+            (center_x_to as f32, center_y_to as f32),
+            Rgb([255u8, 103u8, 33u8]),
+        );
+
+        draw_filled_circle_mut(
+            &mut img,
+            (center_x as i32, center_y as i32),
+            radius as i32,
+            Rgb([69u8, 203u8, 133u8]),
+        );
+
+        draw_text_mut(
+            &mut img,
+            Rgb([99u8, 103u8, 233u8]),
+            center_x - text_half_height as u32,
+            center_y - text_half_height as u32,
+            scale,
+            &font,
+            &node.get_id().to_string().to_owned(),
+        );
+
+        center_x += x_step;
+
+        for r in node.node_list_immutable() {
+            stack.push_back(&r);
+        }
+    }
+
+    img.save("fractal.png").unwrap();
 }
 
 fn get_canvas(root_node: &LinkTreeNode) -> String {

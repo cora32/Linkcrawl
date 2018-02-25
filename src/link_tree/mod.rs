@@ -77,4 +77,8 @@ impl LinkTreeNode {
     pub fn node_list_immutable(&self) -> &Vec<LinkTreeNode> {
         &self.node_list
     }
+
+    pub fn get_id(&self) -> &u32 {
+        &self.id
+    }
 }

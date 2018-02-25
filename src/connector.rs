@@ -13,6 +13,7 @@ use link_tree::LinkTreeNode;
 use std::sync::RwLock;
 use crossbeam;
 use statistics_server::listen as start_stat_server;
+use std::collections::HashMap;
 
 pub struct Connector {
     client: Client<HttpsConnector<HttpConnector>, Body>,
@@ -267,33 +268,69 @@ impl Connector {
         parent_link: &String,
         file_extensions: &Vec<String>,
         depth: &u32,
+        height: &mut u32,
+        width: &mut u32,
+        depth_map: &mut HashMap<u32, u32>,
     ) {
+        // *depth_map.entry(*node.depth()).or_insert(0) += 1;
+
+        if *height < *node.depth() + 1 {
+            *height = *node.depth() + 1;
+        }
+
         if node.depth() == depth {
-            println!("Maximum depth of {} exceeded.", depth);
+            // println!("Maximum depth of {} exceeded.", depth);
             return;
         }
 
         self.add_children(node, file_extensions);
+        
+        let len = node.node_list().len() as u32;
+        // println!(" -- FILLING FOR {} VALUE {}", *node.depth() + 1, len);
+        if len > 0 {
+            *depth_map.entry(*node.depth() + 1).or_insert(0) += len;
+            *width = len + *width - 1;
+        }
 
         for mut x in node.node_list() {
-            self.fill_with_data(&mut x, parent_link, file_extensions, depth);
+            self.fill_with_data(
+                &mut x,
+                parent_link,
+                file_extensions,
+                depth,
+                height,
+                width,
+                depth_map,
+            );
         }
     }
-
     /**
      * Starts the site parsing logic.
      */
     pub fn run(&mut self, address: &String, file_extensions: &Vec<String>, depth: &u32) {
         let parent_link = self.get_link(&address);
         let mut root = LinkTreeNode::create(&parent_link);
+        let mut height = 1;
+        let mut width = 1;
+        let mut depth_map: HashMap<u32, u32> = HashMap::new();
 
         //Start stat server.
         unsafe {
             crossbeam::spawn_unsafe(|| {
-                start_stat_server(&mut root);
+                start_stat_server(&mut root, &width, &height, &mut depth_map);
             });
         }
 
-        self.fill_with_data(&mut root, &parent_link, file_extensions, depth);
+        self.fill_with_data(
+            &mut root,
+            &parent_link,
+            file_extensions,
+            depth,
+            &mut height,
+            &mut width,
+            &mut depth_map,
+        );
+        
+        thread::sleep(Duration::from_millis(5000));
     }
 }
